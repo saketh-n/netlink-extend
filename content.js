@@ -44,6 +44,14 @@ const personas = {
       { sender: "other", text: "Demo was great! Moving forward with implementation next month.", timestamp: "2024-02-15 03:00 PM" },
       { sender: "user", text: "Excellent! I\'ll have our success team reach out.", timestamp: "2024-02-15 03:15 PM" }
     ]
+  },
+  persona5: {
+    name: "Alex Nova",
+    title: "AI Researcher",
+    avatar: "https://i.pravatar.cc/150?img=5", // Assuming pravatar provides a new image for img=5
+    conversations: [
+      { sender: "other", text: "Hello! I'm Alex. I can respond in real-time.", timestamp: "2024-03-18 09:00 AM" }
+    ]
   }
 };
 
