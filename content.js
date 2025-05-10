@@ -279,6 +279,16 @@ function processInjectedMessageSend(personaId) {
 
   // If the message is for Persona 5, add a stock response
   if (personaId === 'persona5') {
+    // TODO: Replace this stock response with an LLM that intelligently responds.
+    //       The prompt below should be used, incorporating the chat history.
+
+    let prompt = `You are Alex Nova, an AI Researcher. Your goal is to respond intelligently and naturally to the ongoing conversation. 
+
+Here is the current conversation history (newest messages last):
+${JSON.stringify(currentPersona.conversations, null, 2)}
+
+Based on this history, and the last message from the user: "${messageText}", provide a helpful and relevant response as Alex Nova.`
+    
     // Generate a timestamp slightly after the user's message for the stock response
     const stockResponseTime = new Date(now.getTime() + 1000); // 1 second later
     const stockTimestamp = stockResponseTime.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
