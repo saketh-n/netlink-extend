@@ -277,6 +277,22 @@ function processInjectedMessageSend(personaId) {
   // Manually trigger input event to re-disable send button
   textarea.dispatchEvent(new Event('input', { bubbles: true })); 
 
+  // If the message is for Persona 5, add a stock response
+  if (personaId === 'persona5') {
+    // Generate a timestamp slightly after the user's message for the stock response
+    const stockResponseTime = new Date(now.getTime() + 1000); // 1 second later
+    const stockTimestamp = stockResponseTime.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
+                         + ' ' 
+                         + stockResponseTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    currentPersona.conversations.push({
+      sender: "other", // Persona 5 is the sender
+      text: "Thanks for your message! I'm processing your request.",
+      timestamp: stockTimestamp
+    });
+    console.log("[PERSONA TABS] Added stock response for Persona 5.");
+  }
+
   // Re-display the conversation with the new message
   displayInjectedPersonaConversation(personaId, currentPersona);
   console.log("[PERSONA TABS] Sent message to:", currentPersona.name, "; Message:", messageText);
