@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Message Simulator",
+  "version": "1.0",
+  "description": "Injects simulated conversations into LinkedIn messaging interface",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://evals-networkin.vercel.app/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://evals-networkin.vercel.app/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ]
+} 
