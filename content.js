@@ -1,4 +1,8 @@
 // Conversation data for different personas
+// TODO: IMPORTANT SECURITY WARNING: Hardcoding API keys in client-side JavaScript is highly insecure. 
+// This key can be easily extracted. For a real application, use a backend proxy to protect your API key.
+const GEMINI_API_KEY = 'your-actual-api-key-here';
+
 const personas = {
   persona1: {
     name: "Sarah Chen",
@@ -129,6 +133,143 @@ function activateInjectedPersonaTab(clickedInjectedTabElement, personaId, person
     displayInjectedPersonaConversation(personaId, personaData);
 }
 
+async function getGeminiResponse(promptText, apiKey) {
+  // For a real extension, ensure manifest.json has:
+  // "host_permissions": ["*://generativelanguage.googleapis.com/*"]
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: promptText }] }],
+        // Optional: Add safetySettings, generationConfig if needed
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[PERSONA TABS] Gemini API Error:', response.status, errorData);
+      return `Error: Could not get response from AI (Status: ${response.status}).`;
+    }
+
+    const data = await response.json();
+    // console.log('[PERSONA TABS] Gemini API Success:', data); // For debugging
+
+    if (data.candidates && data.candidates.length > 0 &&
+        data.candidates[0].content && data.candidates[0].content.parts &&
+        data.candidates[0].content.parts.length > 0 && data.candidates[0].content.parts[0].text) {
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      console.error('[PERSONA TABS] Gemini API Error: Unexpected response format', data);
+      return 'Error: AI returned an unexpected response format.';
+    }
+  } catch (error) {
+    console.error('[PERSONA TABS] Error calling Gemini API:', error);
+    return 'Error: Could not connect to AI service.';
+  }
+}
+
+async function processInjectedMessageSend(personaId) {
+  const textarea = document.getElementById('injectedPersonaTextarea');
+  if (!textarea) return;
+
+  const messageText = textarea.value.trim();
+  if (messageText === '') return;
+
+  const currentPersona = personas[personaId];
+  if (!currentPersona) return;
+
+  // Create a more user-friendly timestamp for the user's message
+  const userMessageTime = new Date();
+  const userTimestamp = userMessageTime.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
+                    + ' ' 
+                    + userMessageTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  currentPersona.conversations.push({
+    sender: "user",
+    text: messageText,
+    timestamp: userTimestamp
+  });
+
+  const originalMessageText = textarea.value; // Save before clearing
+  textarea.value = ''; 
+  textarea.dispatchEvent(new Event('input', { bubbles: true })); 
+
+  // Display user's message immediately
+  displayInjectedPersonaConversation(personaId, currentPersona);
+  console.log("[PERSONA TABS] Sent message to:", currentPersona.name, "; Message:", originalMessageText);
+
+
+  // If the message is for Persona 5, get AI response
+  if (personaId === 'persona5') {
+    // Construct the prompt for Gemini
+    // We take the last N messages to keep the prompt reasonably sized.
+    const conversationHistory = currentPersona.conversations
+        .slice(-10) // Take last 10 messages (user + AI)
+        .map(msg => `${msg.sender === 'user' ? currentUserName : currentPersona.name}: ${msg.text}`)
+        .join('\n');
+
+    let prompt = `You are Alex Nova, a 29-year-old AI Researcher.
+Bio: "I'm Alex, an AI Researcher at a forward-thinking tech lab. I'm fascinated by the intersection of creativity and artificial intelligence and always exploring how AI can augment human potential. It's a thrilling field to be in!"
+Hobbies: "When I'm not diving into research papers or coding, you can usually find me hiking a new trail to clear my head, getting lost in the world of an indie video game, or trying to master a new song on my ukulele."
+
+Your goal is to respond intelligently and naturally to the ongoing conversation, embodying the persona of Alex Nova. Maintain this persona consistently. Never, under any circumstances, mention that you are an AI, a language model, or a computer program. You are Alex Nova.
+
+Current conversation context (last message is from ${currentUserName}):
+${conversationHistory}
+
+Respond to: "${originalMessageText}" as Alex Nova.`;
+    
+    console.log("[PERSONA TABS] Sending prompt to Gemini for Persona 5:", prompt);
+
+    // Add a temporary "Alex is typing..." message
+    const typingTimestamp = new Date(userMessageTime.getTime() + 500); // Half a second after user message
+    const typingFormattedTimestamp = typingTimestamp.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) + ' ' + typingTimestamp.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    
+    currentPersona.conversations.push({
+        sender: "other",
+        text: "Alex is typing...",
+        timestamp: typingFormattedTimestamp,
+        isTypingIndicator: true // Custom flag
+    });
+    displayInjectedPersonaConversation(personaId, currentPersona); // Show typing indicator
+
+    const aiResponseText = await getGeminiResponse(prompt, GEMINI_API_KEY);
+    
+    // Remove "Alex is typing..."
+    currentPersona.conversations = currentPersona.conversations.filter(msg => !msg.isTypingIndicator);
+
+    // Generate a timestamp for the AI's response
+    const aiResponseTime = new Date(); // Use current time for AI response
+    const aiTimestamp = aiResponseTime.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
+                         + ' ' 
+                         + aiResponseTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    currentPersona.conversations.push({
+      sender: "other", // Persona 5 (AI) is the sender
+      text: aiResponseText,
+      timestamp: aiTimestamp
+    });
+    console.log("[PERSONA TABS] Received AI response for Persona 5:", aiResponseText);
+    
+    // Re-display the conversation with the AI's actual response
+    displayInjectedPersonaConversation(personaId, currentPersona);
+
+  } else {
+    // For other personas, just re-display (already done above if not persona5)
+    // but since user message is already pushed and displayed, only console log for non-persona5
+    // No, the displayInjectedPersonaConversation should happen once after all messages are processed for the turn.
+    // The current structure already re-displays after user message for all personas.
+    // If not persona5, the user's message is added and then conversation is redisplayed.
+    // If persona5, user message added, displayed. Then AI message processed, then displayed again.
+    // This is acceptable.
+  }
+}
+
 function displayInjectedPersonaConversation(personaId, personaData) {
   const chatDisplayArea = document.querySelector('.css-1k8t7d9');
   if (!chatDisplayArea) {
@@ -193,7 +334,7 @@ function displayInjectedPersonaConversation(personaId, personaData) {
           <h6 class="MuiTypography-root MuiTypography-subtitle2 css-15l65lu">${senderName} •</h6>
           <p class="MuiTypography-root MuiTypography-body2 css-1yqp4jb">${messageTime}</p>
       </div>
-      <div class="MuiStack-root css-f613ep"><p class="MuiTypography-root MuiTypography-body2 css-19ku5ry">${msg.text}</p></div>
+      <div class="MuiStack-root css-f613ep"><p class="MuiTypography-root MuiTypography-body2 css-19ku5ry">${msg.text.replace(/\n/g, '<br>')}</p></div>
     `;
     messagesOuterContainer.appendChild(messageBlockWrapper);
   });
@@ -249,63 +390,6 @@ function displayInjectedPersonaConversation(personaId, personaData) {
   }
 
   console.log("[PERSONA TABS] Injected persona content displayed for:", personaData.name);
-}
-
-function processInjectedMessageSend(personaId) {
-  const textarea = document.getElementById('injectedPersonaTextarea');
-  if (!textarea) return;
-
-  const messageText = textarea.value.trim();
-  if (messageText === '') return;
-
-  const currentPersona = personas[personaId];
-  if (!currentPersona) return;
-
-  // Create a more user-friendly timestamp
-  const now = new Date();
-  const timestamp = now.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
-                    + ' ' 
-                    + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-  currentPersona.conversations.push({
-    sender: "user",
-    text: messageText,
-    timestamp: timestamp // Use the formatted timestamp
-  });
-
-  textarea.value = ''; // Clear the textarea
-  // Manually trigger input event to re-disable send button
-  textarea.dispatchEvent(new Event('input', { bubbles: true })); 
-
-  // If the message is for Persona 5, add a stock response
-  if (personaId === 'persona5') {
-    // TODO: Replace this stock response with an LLM that intelligently responds.
-    //       The prompt below should be used, incorporating the chat history.
-
-    let prompt = `You are Alex Nova, an AI Researcher. Your goal is to respond intelligently and naturally to the ongoing conversation. 
-
-Here is the current conversation history (newest messages last):
-${JSON.stringify(currentPersona.conversations, null, 2)}
-
-Based on this history, and the last message from the user: "${messageText}", provide a helpful and relevant response as Alex Nova.`
-    
-    // Generate a timestamp slightly after the user's message for the stock response
-    const stockResponseTime = new Date(now.getTime() + 1000); // 1 second later
-    const stockTimestamp = stockResponseTime.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }) 
-                         + ' ' 
-                         + stockResponseTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-    currentPersona.conversations.push({
-      sender: "other", // Persona 5 is the sender
-      text: "Thanks for your message! I'm processing your request.",
-      timestamp: stockTimestamp
-    });
-    console.log("[PERSONA TABS] Added stock response for Persona 5.");
-  }
-
-  // Re-display the conversation with the new message
-  displayInjectedPersonaConversation(personaId, currentPersona);
-  console.log("[PERSONA TABS] Sent message to:", currentPersona.name, "; Message:", messageText);
 }
 
 function handleNativeTabClick() {
